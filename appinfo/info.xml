@@ -7,20 +7,11 @@
     <description>App that performs risk based assessments for account recovery</description>
     <version>1.0.0</version>
     <licence>agpl</licence>
-    <author mail="vithu1021@hotmail.com" homepage="https://yourhomepage.com">Your Name</author>
+    <author mail="vithu1021@hotmail.com" homepage="https://github.com/Vithujap/RiskBasedAccountRecovery">Your Name</author>
     <namespace>RiskBasedAccountRecovery</namespace>
     <category>tools</category>
     <bugs>https://your_bug_tracker.com</bugs>
     <dependencies>
         <nextcloud min-version="29" max-version="31"/>
     </dependencies>
-    <navigations>
-        <navigation>
-            <id>RiskBasedAccountRecovery</id>
-            <name>Risk Based Account Recover</name>
-            <route>RiskBasedAccountRecovery.index</route>
-            <icon>app.svg</icon>
-            <type>link</type>
-        </navigation>
-    </navigations>
 </info>
