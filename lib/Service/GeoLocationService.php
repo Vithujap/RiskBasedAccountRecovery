@@ -14,7 +14,7 @@ class GeoLocationService {
      * @param string $ip The IP address to lookup
      * @return string|null The country name or null if not found
      */
-    public function getCountryCodeFromIP($ip) {
+    public function getCountryNameFromIP($ip) {
 
         // Set up the API URL
         $url = "https://ipinfo.io/{$ip}";
@@ -43,7 +43,7 @@ class GeoLocationService {
         if (isset($data['country'])) {
 
             // Converting the country code to full name
-            return $this->getCountryName($data['country']);
+            return $this->convertCountryCodeToName($data['country']);
         } else {
             error_log('Country data not found in response');
             return null;
@@ -54,9 +54,9 @@ class GeoLocationService {
      * Convert country code to country name
      *
      * @param string $countryCode Country code (e.g., "NO")
-     * @return string Country name (e.g., "Norway")
+     * @return string Country name (e.g., "Norway") or country code as fallback.
      */
-    private function getCountryName($countryCode) {
+    private function convertCountryCodeToName($countryCode) {
         //Defining the path to the JSON file containing the country codes and their corresponding country names
         $filepath = __DIR__.'/../Data/country_codes.json';
 
