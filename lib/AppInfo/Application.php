@@ -8,10 +8,33 @@ namespace OCA\RiskBasedAccountRecovery\AppInfo;
 use OCP\AppFramework\App;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\User\Events\UserLoggedInEvent;
+use OCP\User\Events\PostLoginEvent;
 use OCP\IDBConnection;
+use OCP\User\Events\BeforePasswordUpdatedEvent;
+use OCP\IRequest;
+use OCP\IURLGenerator;
+use OCP\IUserSession;
+
+use OCP\IUserManager;
+use OCP\Security\ISecureRandom;
+use OCP\Mail\IMailer;
+use OCP\IConfig;
+
+use OCP\AppFramework\Http\Events\BeforeLoginTemplateRenderedEvent;
+use OCP\AppFramework\TemplateResponse;
+
+
 
 use OCA\RiskBasedAccountRecovery\Service\DatabaseService;
+use OCA\RiskBasedAccountRecovery\Service\RiskAssessmentService;
+use OCA\RiskBasedAccountRecovery\Service\ChallengeService;
+
 use OCA\RiskBasedAccountRecovery\Listener\LoginListener;
+use OCA\RiskBasedAccountRecovery\Listener\AccountRecoveryListener;
+
+use OCA\RiskBasedAccountRecovery\Controller\PasswordResetController;
+use OCA\RiskBasedAccountRecovery\Controller\HelloWorldController;
+
 
 //The main application class for the RiskBaseAccountRecovery App.
 class Application extends App {
@@ -27,21 +50,51 @@ class Application extends App {
         //Retrieve the IDBConnection from the app container to enable database operations
         $dbConnection = $container->query(IDBConnection::class);
 
+        $request = $container->query(IRequest::class);
+
         //Initialize the DatabaseService class with the database connection
         $databaseService = new DatabaseService($dbConnection);
         //Call the createTable() method to create the 'rbaa_contextual_user_information' table if it does not exist
-        $databaseService->createTable();
-
-        // Registering the LoginListener as a service, and injecting the database connection
+        $databaseService->createTables();
+    
+        //Register LoginListenr
         $container->registerService(LoginListener::class, function($c) use ($dbConnection) {
             return new LoginListener($dbConnection);
         });
+        
+        // Register RiskAssessmentService
+        $container->registerService(RiskAssessmentService::class, function ($c) use ($dbConnection) {
+            return new RiskAssessmentService($dbConnection);
+        });
 
-       // Registering the LoginListener to handle user login events. When a UserLoggedInEvent occurs, the handleLogin method of LoginListener will be triggered.
+       // Adding listener to the LoginListener to handle user login events. When a UserLoggedInEvent occurs, the handleLogin method of LoginListener will be triggered.
         $dispatcher->addListener(UserLoggedInEvent::class, function(UserLoggedInEvent $event) use ($container) {
             $container->get(LoginListener::class)->handleLogin($event);
         });
 
+
+        // Register AccountRecoveryListener
+        $container->registerService(AccountRecoveryListener::class, function($c) use ($dbConnection, $request) {
+            return new AccountRecoveryListener($dbConnection, $request);
+        });
+        //Adding a listener to Before the login website/template renderes, and changes the default forgot password link
+        $dispatcher->addListener(BeforeLoginTemplateRenderedEvent::class, function (BeforeLoginTemplateRenderedEvent $event) {
+            //Changing the forgotten pasword link to our own RBAR link.
+            \OCP\Util::addScript('RiskBasedAccountRecovery', 'passwordRedirect'); 
+        });
+
+        //Retrieving the user session
+        $userSession = $container->get(IUserSession::class);
+        //Checking if the user is logged in. If so, we will add the script to show the security question setup if not established.
+        if ($userSession->isLoggedIn()) {
+            //Get the username
+            $username = $userSession->getUser()->getUID();
+            //If the user hasnt established security questions, show it.
+            if (!$databaseService->hasSecurityQuestions($username)) {
+                \OCP\Util::addScript('RiskBasedAccountRecovery', 'securityQuestionSetup');
+            }
+        }
     }
+
 
 }
