@@ -7,6 +7,8 @@ use OCP\IDBConnection;
 use OCA\RiskBasedAccountRecovery\Service\DatabaseService;
 use OCA\RiskBasedAccountRecovery\Service\DeviceInfoService;
 use OCA\RiskBasedAccountRecovery\Service\GeoLocationService;
+//use OCP\Authentication\TwoFactorAuth\IManager as TwoFactorManager;
+
 
 /**
  * LoginListener class is called when user login events are triggered and logs the contextual information of the user such as IP address, browser, operating system, and country,
@@ -14,6 +16,7 @@ use OCA\RiskBasedAccountRecovery\Service\GeoLocationService;
 class LoginListener {
     //Holds the database connection instance
     private $dbConnection;
+    //private $twoFactorManager;
 
     /**
      * Constructor for LoginListener
@@ -22,6 +25,7 @@ class LoginListener {
      */
     public function __construct(IDBConnection $dbConnection) {
         $this->dbConnection = $dbConnection;
+        //$this->twoFactorManager = $twoFactorManager;
     }
         
         
@@ -52,9 +56,10 @@ class LoginListener {
             $dbService = new DatabaseService($this->dbConnection);
             $dbService->insertContextualInformation($username, $ipAddress, $country, $browser, $os);
         } 
-        catch (\Exception $e)  {
+        catch (\Throwable $e)  {
             //Logging any unexpected errors that occurs during the handling of login process.
             error_log("LoginListener: Failed to handle the login - {$e->getMessage()}");
         }
     }
+    
 }

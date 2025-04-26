@@ -30,7 +30,7 @@ use OCA\RiskBasedAccountRecovery\Service\RiskAssessmentService;
 use OCA\RiskBasedAccountRecovery\Service\ChallengeService;
 
 use OCA\RiskBasedAccountRecovery\Listener\LoginListener;
-use OCA\RiskBasedAccountRecovery\Listener\AccountRecoveryListener;
+
 
 use OCA\RiskBasedAccountRecovery\Controller\PasswordResetController;
 use OCA\RiskBasedAccountRecovery\Controller\HelloWorldController;
@@ -63,9 +63,11 @@ class Application extends App {
         });
         
         // Register RiskAssessmentService
+        /*
         $container->registerService(RiskAssessmentService::class, function ($c) use ($dbConnection) {
             return new RiskAssessmentService($dbConnection);
         });
+        */
 
        // Adding listener to the LoginListener to handle user login events. When a UserLoggedInEvent occurs, the handleLogin method of LoginListener will be triggered.
         $dispatcher->addListener(UserLoggedInEvent::class, function(UserLoggedInEvent $event) use ($container) {
@@ -73,10 +75,7 @@ class Application extends App {
         });
 
 
-        // Register AccountRecoveryListener
-        $container->registerService(AccountRecoveryListener::class, function($c) use ($dbConnection, $request) {
-            return new AccountRecoveryListener($dbConnection, $request);
-        });
+
         //Adding a listener to Before the login website/template renderes, and changes the default forgot password link
         $dispatcher->addListener(BeforeLoginTemplateRenderedEvent::class, function (BeforeLoginTemplateRenderedEvent $event) {
             //Changing the forgotten pasword link to our own RBAR link.

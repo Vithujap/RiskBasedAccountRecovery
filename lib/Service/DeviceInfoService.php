@@ -29,7 +29,7 @@ class DeviceInfoService {
             if (preg_match('/OPR|Opera/i', $this->userAgent)) return 'Opera'; // Detects Opera browser
             return 'Unknown Browser'; //Returns "unkown browser" as a fallback in case no browser patterns matches.
         } 
-        catch (\Exception $e) {
+        catch (\Throwable $e) {
             //Logging any unexpected errors that occurs during browser detection process
             error_log("DeviceInfoService: Failed to get browser information - {$e->getMessage()}");
         }
@@ -57,7 +57,7 @@ class DeviceInfoService {
             //Returns "Unknown OS" if no OS pattern matches as a fall-back.
             return 'Unknown OS';    
         }
-        catch (\Exception $e) {
+        catch (\Throwable $e) {
             //Logging any unexpected errors that occurs during OS detection process
             error_log("DeviceInfoService: Failed to get OS information - {$e->getMessage()}");
         }
