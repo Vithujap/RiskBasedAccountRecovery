@@ -159,7 +159,7 @@ class RiskAssessmentServiceTest extends AppTestCase {
     }
     /**
      * This tests for high risk by having a past logins, and current recovery attempt deviating in everything
-     */      
+     */    
     public function testHighRisk() {
         $pastLogins = [
             ['username' => 'testuser', 'ip_address' => '192.168.1.1', 'country' => 'Norway', 'browser' => 'Chrome', 'operating_system' => 'Windows', 'login_time' => '2024-04-01 10:00:00'],
@@ -200,12 +200,12 @@ class RiskAssessmentServiceTest extends AppTestCase {
         $baseIp = '192.168.1.1';
         $baseCountry = 'Norway';
         $baseBrowser = 'Chrome';
-        $baseOS = 'Windows';
+        $baseOS = 'Windows 10';
         $baseTime = strtotime('2024-04-01 10:00:00');
     
         // Historical logins (stable profile)
         $logins = [];
-        for ($i = 0; $i < 20; $i++) {
+        for ($i = 0; $i < rand(5,50); $i++) {
             $logins[] = [
                 'username' => $username,
                 'ip_address' => $baseIp,
@@ -233,22 +233,44 @@ class RiskAssessmentServiceTest extends AppTestCase {
         $high = 0;
         $totalPerType = 30;
         $ips = ['1.2.3.4', '5.6.7.8', '203.0.113.5']; // Example IP pool
-        $browsers = ['Chrome', 'Firefox', 'Safari'];
-        $oses = ['Windows', 'Linux', 'macOS'];
+        $browsers = ['Chrome', 'Firefox', 'Safari', 'Microsoft Edge'];
+        $oses = ['Windows 10', 'Linux', 'Mac OS'];
+        $foreignCountries = ['India', 'Brazil', 'Russia', 'Kenya', 'Norway'];
+
+        $testChanges = [
+            'low' => [],
+            'medium' => [],
+            'high' => [],
+        ];
     
         // 1. Low Risk Tests (only browser changes)
         for ($i = 0; $i < $totalPerType; $i++) {
+
+            //Generating a random browser
+            $newBrowser = $browsers[array_rand($browsers)];
+
             $input = [
                 'username' => $username,
                 'ip_address' => $baseIp,
                 'country' => $baseCountry,
-                'browser' => 'Firefox', // only change
+                'browser' => $newBrowser, // only change
                 'operating_system' => $baseOS,
                 'recovery_time' => date('Y-m-d H:i:s', time()),
             ];
             $risk = $service->assessRisk($input);
-            echo "Low Test #$i → $risk\n";
+            echo "Low Test #".$i+1 .  "→ $risk\n";
             if ($risk === Constants::LOW_RISK) $low++;
+            $testChanges['low'][] = [
+                'test_number' => $i+1,
+                'ip_changed' => 'No',
+                'country_changed' => 'No',
+                'browser_changed' => ($newBrowser !==$baseBrowser) ? 'Yes' : 'No',
+                'os_changed' => 'No',
+                'risk_score' => $riskScore ?? '-',
+                'risk_level' => $risk,
+            ];
+
+
         }
     
 
@@ -276,30 +298,69 @@ class RiskAssessmentServiceTest extends AppTestCase {
             ];
         
             $risk = $service->assessRisk($input);
-            echo "Medium Test #$i → $risk\n";
+            echo "Medium Test #".$i+1 .  "→ $risk\n";
         
             if ($risk === Constants::MEDIUM_RISK) $medium++;
+            $testChanges['medium'][] = [
+                'test_number' => $i+1,
+                'ip_changed' => 'Yes',
+                'country_changed' => 'No',
+                'browser_changed' => ($newBrowser !==$baseBrowser) ? 'Yes' : 'No',
+                'os_changed' => ($newOS !==$baseOS) ? 'Yes' : 'No',
+                'risk_score' => $riskScore ?? '-',
+                'risk_level' => $risk,
+            ];
         }
 
 
     
         // 3. High Risk Tests (new country + IP + OS)
-        $foreignCountries = ['India', 'Brazil', 'Russia', 'Kenya'];
         for ($i = 0; $i < $totalPerType; $i++) {
+            $newCountry = $foreignCountries[array_rand($foreignCountries)];
+            $newBrowser = $browsers[array_rand($browsers)];
+            $newOS = $oses[array_rand($oses)];
+
             $input = [
                 'username' => $username,
                 'ip_address' => '8.8.' . rand(0, 255) . '.' . rand(0, 255),
-                'country' => $foreignCountries[array_rand($foreignCountries)],
-                'browser' => 'Safari',
-                'operating_system' => 'Linux',
+                'country' => $newCountry,
+                'browser' => $newBrowser,
+                'operating_system' => $newOS,
                 'recovery_time' => date('Y-m-d H:i:s', time() + rand(36000, 43200)), // far from usual time
             ];
             $risk = $service->assessRisk($input);
-            echo "High Test #$i → $risk\n";
+            echo "High Test #".$i+1 .  "→ $risk\n";
             if ($risk === Constants::HIGH_RISK) $high++;
+            $testChanges['high'][] = [
+                'test_number' => $i+1,
+                'ip_changed' => 'Yes',
+                'country_changed' => ($newCountry!==$baseCountry) ? 'Yes' : 'No',
+                'browser_changed' => ($newBrowser !==$baseBrowser) ? 'Yes' : 'No',
+                'os_changed' => ($newOS !==$baseOS) ? 'Yes' : 'No',
+                'risk_score' => $riskScore ?? '-',
+                'risk_level' => $risk,
+            ];
         }
-    
+
+        $totalPastLogins = count($logins);
+        
+
+        
+        foreach (['low', 'medium', 'high'] as $riskTest) {
+            echo "\n----- $riskTest -----\n";
+            foreach ($testChanges[$riskTest] as $i => $change) {
+                echo "Test #". ($change['test_number']) . "\n";
+                echo "IP changed: ". ($change['ip_changed']) . "\n";
+                echo "Country changed: ". ($change['country_changed']) . "\n";
+                echo "Browser changed: ". ($change['browser_changed']) . "\n";
+                echo "OS changed: ". ($change['os_changed']) . "\n";
+                echo "Risk Score: ". ($change['risk_score']) . "\n";
+                echo "Risk Level: ". ($change['risk_level']) . "\n";
+                echo "\n----------\n";
+            }
+        }
         // Summary
+        echo "Amount of past logins: $totalPastLogins\n";
         echo "Low Risk Detected: $low / $totalPerType\n";
         echo "Medium Risk Detected: $medium / $totalPerType\n";
         echo "High Risk Detected: $high / $totalPerType\n";

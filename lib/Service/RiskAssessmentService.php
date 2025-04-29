@@ -7,7 +7,10 @@ use OCA\RiskBasedAccountRecovery\Service\Constants;
 //This class is used to conduct the risk assessment.
 class RiskAssessmentService {
     private $dbConnection;
-
+    private $ipBaseWeight = 2;
+    private $countryBaseWeight = 3;
+    private $browserBaseWeight = 1;
+    private $osBaseWeight = 2;
     /**
      * Constructor to inject dependencies.
      */
@@ -32,7 +35,7 @@ class RiskAssessmentService {
                 SELECT * FROM rbaa_contextual_user_information
                 WHERE username = :username
                 ORDER BY login_time DESC
-                LIMIT 20
+                LIMIT 50
             ");
     
             $query->bindParam(':username', $username);
@@ -55,19 +58,19 @@ class RiskAssessmentService {
             foreach ($pastLogins as $login) {
                 if ($login['ip_address'] !== $currentIp) {
                     $ipMismatchCount++;
-                    $riskScore += 2; // Weight for IP mismatch
+                    $riskScore += $this->ipBaseWeight; // Weight for IP mismatch
                 }
                 if ($login['country'] !== $currentCountry) {
                     $countryMismatchCount++;
-                    $riskScore += 1.5; // Weight for country mismatch
+                    $riskScore += $this->countryBaseWeight; // Weight for country mismatch
                 }
                 if ($login['browser'] !== $currentBrowser) {
                     $browserMismatchCount++;
-                    $riskScore += 0.5; // Weight for browser mismatch
+                    $riskScore += $this->browserBaseWeight; // Weight for browser mismatch
                 }
                 if ($login['operating_system'] !== $currentOS) {
                     $osMismatchCount++;
-                    $riskScore += 0.5; // Weight for OS mismatch
+                    $riskScore += $this->osBaseWeight; // Weight for OS mismatch
                 }
             }
     
@@ -104,11 +107,12 @@ class RiskAssessmentService {
             if ($riskScore >= 8 || $anomalies >= 3) {
                 $riskLevel = Constants::HIGH_RISK;
             } elseif ($riskScore >= 4 || $anomalies >= 2) {
-                $riskLevel = "Medium Risk";
+                $riskLevel = Constants::MEDIUM_RISK;
             } else {
-                $riskLevel = "Low Risk";
+                $riskLevel = Constants::LOW_RISK;
             }
-    
+            echo("RISK SCORE:" . $riskScore . "\n");
+            echo("ANOMALY SAMOUNT:" . $anomalies . "\n");
             return $riskLevel;
         }
         catch (\Throwable $e) {

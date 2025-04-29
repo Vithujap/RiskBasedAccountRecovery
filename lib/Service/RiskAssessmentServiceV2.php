@@ -10,10 +10,10 @@ class RiskAssessmentServiceV2 {
     private $lowCeiling = 4.0;
     private $highCeiling = 7.0;
     //Weight for different contextual information
-    private $ipBaseWeight = 3;
-    private $countryBaseWeight = 2;
+    private $ipBaseWeight = 2;
+    private $countryBaseWeight = 3;
     private $browserBaseWeight = 1;
-    private $osBaseWeight = 1;
+    private $osBaseWeight = 2;
 
 
     /**
@@ -33,7 +33,7 @@ class RiskAssessmentServiceV2 {
             SELECT * FROM rbaa_contextual_user_information
             WHERE username = :username
             ORDER BY login_time DESC
-            LIMIT 20
+            LIMIT 50
         ");
         $query->bindParam(':username', $username);
         $query->execute();
@@ -83,12 +83,22 @@ class RiskAssessmentServiceV2 {
      * @return float The standard deviation
      */
     private function standardDeviation(array $values): float {
-        // calculate the avg of the values
-        $avg = array_sum($values) / max(count($values), 1);
+        $count = count($values); //n
+
+        //Need minimum 2 values to perform sample standard deviation. Handle if not.
+        if ($count < 2) {
+            return 0.0;
+        }
+        // calculate the avg of the values (x̄)
+        $avg = array_sum($values) / $count; 
+
         // calculate the variance:
-        // For each value, calculate (value-2)^2 and sum all the squared differences and divide the total by the total of numbers
-        $variance = array_sum(array_map(fn($v) => pow($v - $avg, 2), $values)) / max(count($values), 1);
-        // return the squared root of the variance, which is the standard deviation
+        $variance = array_sum(array_map(
+            fn($value) => pow($value - $avg, 2), // (x-x̄)^2
+             $values
+             )) / ($count -1 ); // divide by n - 1
+
+        // return the squared root of the variance, which is the standard deviation (sqrt(variance))
         return sqrt($variance);
     }
     /**
@@ -102,14 +112,23 @@ class RiskAssessmentServiceV2 {
         $times = array_map(fn($login) => strtotime($login['login_time']), $pastLogins);
         // if there login data is less than 2, it is not enough to reliably detect anomaly. so we class it as not an anomaly
         if (count($times) < 2) return 0;
+
         // calculate the avg login time
         $avg = array_sum($times)/ count($times);
         // calculate the standard deviation of login times
         $std = $this->standardDeviation($times);
+
+        //if standard deviation is 0, handle this or z score will try to devide by 0 which is not possible.
+        if ($std == 0) return 0;
+
         // convert the current recovery attempt time to a Unix timestamp format
         $recoveryTime = strtotime($currentRecoveryTime);
-        // if the recovery time is more than 1.5 standard deviation away from the average, treat it as a time anomaly and return a risk score of 1. Else 0
-        return (abs($recoveryTime - $avg) > 1.5 * $std) ? 1 : 0;
+
+        //Calculate the Z-score of the recovery time.
+        $z = ($recoveryTime - $avg) / $std;
+        
+        // If the absolute Z-score is more than 1.5, flag as anomaly and return a risk score of 1, else 0.
+        return abs($z) > 1.5 ? 1 : 0;
     }
 
     /**
@@ -122,6 +141,8 @@ class RiskAssessmentServiceV2 {
      */
     private function getDynamicThresholdsFromUserHistory(array $pastLogins): array {
         $scores = [];
+        $lowPercentile = 0.6;
+        $highPercentile = 0.9;
         //Iterate over each login attempt
         foreach ($pastLogins as $i => $login) {
             // all previous logins are seen as historical data
@@ -138,12 +159,13 @@ class RiskAssessmentServiceV2 {
 
         //If there arent enough past scores (less then 3), fall back to a more safer static threshold
         if ($count < 3) {
-            $indexLow = min((int)($count * 0.60), $count -1);
-            $indexHigh = min((int)($count * 0.90), $count -1);
+            $indexLow = min((int)($count * $lowPercentile), $count -1);
+            $indexHigh = min((int)($count * $highPercentile), $count -1);
 
             // Apply minimum and maximum ceiling caps to avoid the threholds becoming too loose or tight.
             $low = max(min($scores[$indexLow], $this->lowCeiling), 2.5);
             $high = max(min($scores[$indexHigh], $this->highCeiling), $low + 2.5);
+            
 
             return ['low' => $low, 'high' => $high];
         }
@@ -153,6 +175,8 @@ class RiskAssessmentServiceV2 {
         // Calculate dynamic thresholds based on the sorted historical risk scores.
         // 60th percentiles is the low threshold, 90th percentile becomes the high threshold.
         // Ceiling cap is added to avoid thresholds becoming too loose or tight.
+        //Low risk threshold is clamped between 2.5 and 4 (lowCeiling value)
+        //High risk threshold is clamped between $low + 2.5 and 7 (highCeiling value)
         $low = max(min($scores[(int)($count * 0.60)], $this->lowCeiling), 2.5);
         $high = max(min($scores[(int)($count * 0.90)], $this->highCeiling), $low + 2.5);
 
