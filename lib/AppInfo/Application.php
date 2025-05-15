@@ -61,20 +61,11 @@ class Application extends App {
         $container->registerService(LoginListener::class, function($c) use ($dbConnection) {
             return new LoginListener($dbConnection);
         });
-        
-        // Register RiskAssessmentService
-        /*
-        $container->registerService(RiskAssessmentService::class, function ($c) use ($dbConnection) {
-            return new RiskAssessmentService($dbConnection);
-        });
-        */
 
        // Adding listener to the LoginListener to handle user login events. When a UserLoggedInEvent occurs, the handleLogin method of LoginListener will be triggered.
         $dispatcher->addListener(UserLoggedInEvent::class, function(UserLoggedInEvent $event) use ($container) {
             $container->get(LoginListener::class)->handleLogin($event);
         });
-
-
 
         //Adding a listener to Before the login website/template renderes, and changes the default forgot password link
         $dispatcher->addListener(BeforeLoginTemplateRenderedEvent::class, function (BeforeLoginTemplateRenderedEvent $event) {

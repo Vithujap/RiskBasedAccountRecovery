@@ -43,7 +43,9 @@ class RiskAssessmentServiceV2 {
         if (!$pastLogins) return Constants::HIGH_RISK;
 
         //Calculate the risk score
-        $riskScore = $this->calculateContextualRisk($pastLogins, $currentRecovery);
+        error_log("------------------------");
+        error_log("Calculating total risk score for: " . $username);
+        $riskScore = $this->calculateContextualRisk($pastLogins, $currentRecovery, true);
 
         // --- Dynamic Thresholds ---
         $thresholds = $this->getDynamicThresholdsFromUserHistory($pastLogins);
@@ -54,7 +56,7 @@ class RiskAssessmentServiceV2 {
             default => Constants::LOW_RISK,
         };
 
-        error_log("Risk Score: {$riskScore} | Low Threshold: {$thresholds['low']} | High Threshold: {$thresholds['high']}");
+        error_log("Assess Risk from User: {$username} | Risk Score: {$riskScore} | Low Threshold: {$thresholds['low']} | High Threshold: {$thresholds['high']}");
 
         return $riskLevel;
     }
@@ -68,13 +70,15 @@ class RiskAssessmentServiceV2 {
     private function frequencyScore($frequencyMap, $value, $baseWeight) {
         // count represents how many times a specific $value (like IP address, browser, OS etc) has appeared in the past login history.
         $count = $frequencyMap[$value] ?? 0;
-        // If value was never seen before, assign full risk score.
-        if ($count === 0) return $baseWeight; 
-        // if value was seen only once, lower the risk score by assigning 80% of the risk score
-        if ($count === 1) return $baseWeight * 0.8; 
-        // if value was seen up to three times, lower the risk score by assigning 60% of the risk score
-        if ($count <= 3) return $baseWeight * 0.6;
-        // if its more than three times, return 0 as risk score.
+        $totalLogins = array_sum($frequencyMap);
+
+        $proportion = $count / $totalLogins;
+        if ($proportion === 0) return $baseWeight; 
+        // If value was seen in 20% or fewer of past logins, assign 80% of the risk score.
+        if ($proportion <= 0.2) return $baseWeight * 0.8; 
+        // // If value was seen in 50% or fewer of past logins, assign 60% of the risk score.
+        if ($proportion <= 0.5) return $baseWeight * 0.6;
+        // if its more than 50% of past logins, assign 0 to the risk score.
         return 0;
     }
     /**
@@ -150,38 +154,25 @@ class RiskAssessmentServiceV2 {
             // Need atleast 2 past logins to evaluate the threshold normally
             if (count($historicalSubset) < 2) continue;
             // Start calculating a risk score for this login
-            $score = $this->calculateContextualRisk($pastLogins, $login);
+            $score = $this->calculateContextualRisk($pastLogins, $login, false);
             $scores[] = $score;
         }
         // Sort the scores in ascending order for percentile calculations
         sort($scores);
         $count = count($scores);
-
-        //If there arent enough past scores (less then 3), fall back to a more safer static threshold
-        if ($count < 3) {
-            $indexLow = min((int)($count * $lowPercentile), $count -1);
-            $indexHigh = min((int)($count * $highPercentile), $count -1);
-
-            // Apply minimum and maximum ceiling caps to avoid the threholds becoming too loose or tight.
-            $low = max(min($scores[$indexLow], $this->lowCeiling), 2.5);
-            $high = max(min($scores[$indexHigh], $this->highCeiling), $low + 2.5);
-            
-
-            return ['low' => $low, 'high' => $high];
-        }
-    
-
+        $indexLow = min((int)($count * $lowPercentile), $count -1);
+        $indexHigh = min((int)($count * $highPercentile), $count -1);
     
         // Calculate dynamic thresholds based on the sorted historical risk scores.
         // 60th percentiles is the low threshold, 90th percentile becomes the high threshold.
         // Ceiling cap is added to avoid thresholds becoming too loose or tight.
         //Low risk threshold is clamped between 2.5 and 4 (lowCeiling value)
         //High risk threshold is clamped between $low + 2.5 and 7 (highCeiling value)
-        $low = max(min($scores[(int)($count * 0.60)], $this->lowCeiling), 2.5);
-        $high = max(min($scores[(int)($count * 0.90)], $this->highCeiling), $low + 2.5);
-
+        $low = max(min($scores[$indexLow], $this->lowCeiling), 2.5);
+        $high = max(min($scores[$indexHigh], $this->highCeiling), $low + 2.5);
         return ['low' => round($low, 2), 'high' => round($high, 2)];
     }
+    
 
     /**
      * This function calculates the contextual risk score 
@@ -189,7 +180,7 @@ class RiskAssessmentServiceV2 {
      * @param array $currentAttempt is an array of the current attempt (either recovery attempt or login) contextual data.
      * @return float the risk score.
      */
-    private function calculateContextualRisk(array $pastLogins, array $currentAttempt) : float {
+    private function calculateContextualRisk(array $pastLogins, array $currentAttempt, bool $logging) : float {
         
         // Frequency maps
         $ipFrequency = array_count_values(array_column($pastLogins, 'ip_address'));
@@ -199,12 +190,40 @@ class RiskAssessmentServiceV2 {
 
         // Calculates the risk score.
         $score = 0;
+        if ($logging) {
+        
+
+        error_log("Calculating IP");
         $score += $this->frequencyScore($ipFrequency, $currentAttempt['ip_address'], $this->ipBaseWeight); 
+        error_log("Score after IP: " . $score);
+        error_log("Calculating Country");
         $score += $this->frequencyScore($countryFrequency, $currentAttempt['country'], $this->countryBaseWeight); 
+        error_log("Score after Country: " . $score);
+        error_log("Calculating Browser");
         $score += $this->frequencyScore($browserFrequency, $currentAttempt['browser'], $this->browserBaseWeight); 
+        error_log("Score after Browser: " . $score);
+        error_log("Calculating OS");
         $score += $this->frequencyScore($osFrequency, $currentAttempt['operating_system'], $this->osBaseWeight);
+        error_log("Score after OS: " . $score);
+        error_log("Calculating time");
         $score += $this->timeAnomalyScore($pastLogins, $currentAttempt['login_time'] ?? $currentAttempt['recovery_time']);
+        error_log("Score after time and FINAL risk score: " . $score);
+        error_log("------------------------");
         return $score;
+        }
+        else {
+            $score += $this->frequencyScore($ipFrequency, $currentAttempt['ip_address'], $this->ipBaseWeight); 
+
+            $score += $this->frequencyScore($countryFrequency, $currentAttempt['country'], $this->countryBaseWeight); 
+ 
+            $score += $this->frequencyScore($browserFrequency, $currentAttempt['browser'], $this->browserBaseWeight); 
+
+            $score += $this->frequencyScore($osFrequency, $currentAttempt['operating_system'], $this->osBaseWeight);
+
+            $score += $this->timeAnomalyScore($pastLogins, $currentAttempt['login_time'] ?? $currentAttempt['recovery_time']);
+            return $score;
+        }
+
     }
     
 

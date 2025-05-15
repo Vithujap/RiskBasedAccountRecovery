@@ -64,10 +64,6 @@ class SecurityQuestionChallenge {
             $questionText = $challengeData['question'];
             $userAnswer = trim(mb_strtolower($challengeData['response'], 'UTF-8'));
     
-            error_log("Validating security question for user: $username");
-            error_log("Provided Question: $questionText");
-            error_log("Provided Answer: $userAnswer");
-    
             // Call the verification function in SecurityQuestionsService
             $isValid = $this->securityQuestionsService->verifySecurityQuestion($username, $questionText, $userAnswer);
             

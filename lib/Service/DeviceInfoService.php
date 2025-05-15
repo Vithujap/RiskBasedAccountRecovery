@@ -46,6 +46,7 @@ class DeviceInfoService {
             $patterns = [
                 'Windows 11' => '/Windows NT 10.0;.*Win64.*11/',
                 'Windows 10' => '/Windows NT 10.0/',
+                'iOS' => '/iPhone|iPad/',
                 'Mac OS' => '/Macintosh|Mac OS X/',
                 'Android' => '/Android/',
                 'Linux' => '/Linux/',
